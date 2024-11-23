@@ -25,6 +25,7 @@ Technologies Used
     HTML5: Used for structuring the webpage.
     CSS3: For styling and responsive design.
     JavaScript: Handling logic and functionality for translation and dynamic behavior.
+    React: Used to build the interactive user interface and manage the state of the application.
     FontAwesome: Used for icons such as volume, copy, and exchange buttons.
     Google Fonts (Poppins): For custom font styling.
 

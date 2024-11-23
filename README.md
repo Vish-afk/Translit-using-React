@@ -29,15 +29,3 @@ Technologies Used
     FontAwesome: Used for icons such as volume, copy, and exchange buttons.
     Google Fonts (Poppins): For custom font styling.
 
-
-File Structure
-
-    index.html: The main HTML file containing the structure of the app.
-    style.css: The stylesheet for styling the web app.
-    js/script.js: The JavaScript file that powers the app's dynamic functionality (translation logic, language handling, etc.).
-    js/countries.js: Contains the language options and related functionality for the app.
-    favicon.png: The app's favicon.
-
-
-
-

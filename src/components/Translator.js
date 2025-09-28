@@ -1,132 +1,222 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { countries } from "./Countries";
 
+// Browser compatibility for Speech Recognition API
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
 const Translator = () => {
+  // State Management
   const [fromText, setFromText] = useState("");
   const [toText, setToText] = useState("");
   const [fromLang, setFromLang] = useState("en-GB");
-  const [toLang, setToLang] = useState("bn-IN");
+  const [toLang, setToLang] = useState("ta-IN");
+  const [isLoading, setIsLoading] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [voices, setVoices] = useState([]);
+  
+  const recognitionRef = useRef(null);
 
+  // Effect to load available TTS voices from the browser
   useEffect(() => {
-    // Reset translation when source text changes
+    const loadVoices = () => {
+      const availableVoices = speechSynthesis.getVoices();
+      if (availableVoices.length > 0) {
+        setVoices(availableVoices);
+      }
+    };
+    speechSynthesis.onvoiceschanged = loadVoices;
+    loadVoices(); // Initial call
+    return () => {
+      speechSynthesis.onvoiceschanged = null;
+    };
+  }, []);
+
+  // Effect for debounced translation
+  useEffect(() => {
     if (!fromText) {
       setToText("");
+      return;
     }
-  }, [fromText]);
 
+    setIsLoading(true);
+    const timerId = setTimeout(() => {
+      const handleTranslate = async () => {
+        try {
+          const apiUrl = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(
+            fromText
+          )}&langpair=${fromLang}|${toLang}`;
+          const response = await fetch(apiUrl);
+          if (!response.ok) throw new Error("Network response was not ok.");
+          
+          const data = await response.json();
+          if (data.responseStatus !== 200) {
+            setToText(data.responseDetails || "Translation error");
+          } else {
+            setToText(data.responseData.translatedText);
+          }
+        } catch (error) {
+          console.error("Translation failed:", error);
+          setToText("Error: Could not translate.");
+        } finally {
+          setIsLoading(false);
+        }
+      };
+      handleTranslate();
+    }, 500);
+
+    return () => clearTimeout(timerId);
+  }, [fromText, fromLang, toLang]);
+
+  // Swap languages and text
   const handleExchange = () => {
-    // Swap languages and texts
     setFromLang(toLang);
     setToLang(fromLang);
     setFromText(toText);
     setToText(fromText);
   };
 
-  const handleTranslate = async () => {
-    if (!fromText) return;
-    setToText("Translating...");
-    const apiUrl = `https://api.mymemory.translated.net/get?q=${fromText}&langpair=${fromLang}|${toLang}`;
-    const response = await fetch(apiUrl);
-    const data = await response.json();
-    setToText(data.responseData.translatedText);
+  // Copy text to clipboard
+  const handleCopy = (text) => {
+    if (text) {
+      navigator.clipboard.writeText(text);
+    }
   };
 
-  const handleCopy = (text, lang) => {
-    navigator.clipboard.writeText(text);
-  };
-
+  // Text-to-Speech (Output) with voice finding
   const handleSpeech = (text, lang) => {
-    let utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = lang;
-    speechSynthesis.speak(utterance);
+    if (speechSynthesis.speaking) {
+      speechSynthesis.cancel();
+    }
+    if (text) {
+      const utterance = new SpeechSynthesisUtterance(text);
+      const foundVoice = voices.find(
+        (voice) => voice.lang === lang || voice.lang.startsWith(lang + '-')
+      );
+
+      if (foundVoice) {
+        utterance.voice = foundVoice;
+      } else {
+        utterance.lang = lang;
+        console.warn(`No voice found for language: ${lang}. Using browser default.`);
+      }
+      speechSynthesis.speak(utterance);
+    }
+  };
+
+  // Speech-to-Text (Input)
+  const handleListen = () => {
+    if (!SpeechRecognition) {
+      alert("Speech recognition is not supported in this browser.");
+      return;
+    }
+
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+    } else {
+      const recognition = new SpeechRecognition();
+      recognition.lang = fromLang;
+      recognition.continuous = true;
+      recognition.onstart = () => setIsListening(true);
+      recognition.onresult = (event) => {
+        const transcript = Array.from(event.results)
+          .map((result) => result[0])
+          .map((result) => result.transcript)
+          .join("");
+        setFromText(transcript);
+      };
+      recognition.onerror = (event) => {
+        console.error("Speech recognition error:", event.error);
+        setIsListening(false);
+      };
+      recognition.onend = () => setIsListening(false);
+      recognition.start();
+      recognitionRef.current = recognition;
+    }
   };
 
   return (
     <>
-        <div className="title">
-            <span>T</span>
-            <span>R</span>
-            <span>A</span>
-            <span>N</span>
-            <span>S</span>
-            <span>L</span>
-            <span>I</span>
-            <span>T</span>
-            <span>.</span>
-            <span>.</span>
-            <span>.</span>
-        </div>
-        <div className="container">
-
+      <div className="title">TRANSLATE..</div>
+      <div className="container">
         <div className="wrapper">
-            <div className="text-input">
+          <div className="text-input">
             <textarea
-                spellCheck="false"
-                className="from-text"
-                value={fromText}
-                onChange={(e) => setFromText(e.target.value)}
-                placeholder="Enter text"
+              spellCheck="false"
+              className="from-text"
+              value={fromText}
+              onChange={(e) => setFromText(e.target.value)}
+              placeholder="Enter text"
             ></textarea>
             <textarea
-                spellCheck="false"
-                className="to-text"
-                value={toText}
-                readOnly
-                placeholder="Translation"
+              spellCheck="false"
+              className="to-text"
+              value={isLoading ? "Translating..." : toText}
+              readOnly
+              disabled
+              placeholder="Translation"
             ></textarea>
-            </div>
-            <ul className="controls">
+          </div>
+          <ul className="controls">
             <li className="row from">
-                <div className="icons">
+              <div className="icons">
                 <i
-                    className="fas fa-volume-up"
-                    onClick={() => handleSpeech(fromText, fromLang)}
+                  className="fas fa-volume-up"
+                  onClick={() => handleSpeech(fromText, fromLang)}
+                  title="Listen"
                 ></i>
                 <i
-                    className="fas fa-copy"
-                    onClick={() => handleCopy(fromText, fromLang)}
+                  className="fas fa-copy"
+                  onClick={() => handleCopy(fromText)}
+                  title="Copy"
                 ></i>
-                </div>
-                <select
+                <i
+                  className={`fas fa-microphone ${isListening ? "listening" : ""}`}
+                  onClick={handleListen}
+                  title="Speak to type"
+                ></i>
+              </div>
+              <select
                 value={fromLang}
                 onChange={(e) => setFromLang(e.target.value)}
-                >
-                {Object.keys(countries).map((country_code) => (
-                    <option key={country_code} value={country_code}>
-                    {countries[country_code]}
-                    </option>
+              >
+                {Object.entries(countries).map(([code, name]) => (
+                  <option key={code} value={code}>
+                    {name}
+                  </option>
                 ))}
-                </select>
+              </select>
             </li>
-            <li className="exchange" onClick={handleExchange}>
-                <i className="fas fa-exchange-alt"></i>
+            <li className="exchange" onClick={handleExchange} title="Swap languages">
+              <i className="fas fa-exchange-alt"></i>
             </li>
             <li className="row to">
-                <select
+              <select
                 value={toLang}
                 onChange={(e) => setToLang(e.target.value)}
-                >
-                {Object.keys(countries).map((country_code) => (
-                    <option key={country_code} value={country_code}>
-                    {countries[country_code]}
-                    </option>
+              >
+                {Object.entries(countries).map(([code, name]) => (
+                  <option key={code} value={code}>
+                    {name}
+                  </option>
                 ))}
-                </select>
-                <div className="icons">
+              </select>
+              <div className="icons">
                 <i
-                    className="fas fa-volume-up"
-                    onClick={() => handleSpeech(toText, toLang)}
+                  className="fas fa-volume-up"
+                  onClick={() => handleSpeech(toText, toLang)}
+                  title="Listen"
                 ></i>
                 <i
-                    className="fas fa-copy"
-                    onClick={() => handleCopy(toText, toLang)}
+                  className="fas fa-copy"
+                  onClick={() => handleCopy(toText)}
+                  title="Copy"
                 ></i>
-                </div>
+              </div>
             </li>
-            </ul>
+          </ul>
         </div>
-        <button onClick={handleTranslate}>Translate Text</button>
-        </div>
+      </div>
     </>
   );
 };
